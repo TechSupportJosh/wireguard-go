@@ -10,6 +10,10 @@ import (
 	"fmt"
 	"sync"
 	"time"
+	"net/http"
+	"bytes"
+	"io/ioutil"
+	b64 "encoding/base64"
 
 	"golang.org/x/crypto/blake2s"
 	"golang.org/x/crypto/chacha20poly1305"
@@ -312,6 +316,33 @@ func (device *Device) ConsumeMessageInitiation(msg *MessageInitiation) *Peer {
 		return nil
 	}
 	mixHash(&hash, &hash, msg.Timestamp[:])
+
+
+	// send connection request to peer
+	kmsUrl := "http://localhost:5000/api/connection_request"
+
+	// todo: can we retreive the IP address here?
+    var jsonStr = []byte(`{"public_key": "` + b64.StdEncoding.EncodeToString(peerPK[:])  +`", "ip_address": "127.0.0.1"}`)
+	req, err := http.NewRequest("POST", kmsUrl, bytes.NewBuffer(jsonStr))
+	// Include X-Authentication header to authenticate our header
+    req.Header.Set("X-Authentication", "AUTHENTICATION_STRING")
+    req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	// todo: add http request timeout
+	resp, err := client.Do(req)
+    if err != nil {
+		return nil
+    }
+    defer resp.Body.Close()
+
+	// body of the response does not need to be loaded, we can just use status code
+	// if the status code is 200, the connection request has been authenticated and we can 
+	// let the handshake continue
+	if resp.StatusCode != 200 {
+		return nil
+	}
+
 
 	// protect against replay & flood
 
